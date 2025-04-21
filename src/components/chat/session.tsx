@@ -15,7 +15,7 @@ interface ChatSessionProps {
 }
 
 export function ChatSession({ sessionId }: ChatSessionProps) {
-  const [iterations, setIterations] = useState<Iteration[]>([]);
+const [iterations, setIterations] = useState<Iteration[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { response, startStreaming } = useStreamingChat();
@@ -64,7 +64,7 @@ export function ChatSession({ sessionId }: ChatSessionProps) {
       message: userMessage,
     };
 
-    setIterations((prev) => [...prev, userIteration]);
+setIterations((prev) => prev ? [...prev, userIteration] : [userIteration]);
 
     // Start streaming the AI response
     const controls = startStreaming(sessionId, content);
@@ -127,9 +127,9 @@ export function ChatSession({ sessionId }: ChatSessionProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {iterations.map((iteration) => (
-          <ChatMessage key={iteration.id} message={iteration.message} />
-        ))}
+{iterations && iterations.map((iteration) => (
+        <ChatMessage key={iteration.id} message={iteration.message} />
+      ))}
 
         {/* Streaming response */}
         {response.fullContent && !response.isComplete && (

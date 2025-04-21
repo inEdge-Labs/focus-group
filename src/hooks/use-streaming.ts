@@ -15,7 +15,6 @@ export type StreamingControls = {
 
 /**
  * React hook for streaming chat communication
- * Implements exact same streaming logic as the JavaScript example
  */
 export function useStreamingChat() {
   // State for the streaming response
@@ -53,9 +52,12 @@ export function useStreamingChat() {
   }, [cleanup]);
 
   // Get user ID from localStorage or use default
-  const getUserId = () => {
+  const getUserId = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("userId") || "user123";
+    }
     return "user123";
-  };
+  }, []);
 
   // Start streaming function
   const startStreaming = useCallback(
@@ -80,14 +82,49 @@ export function useStreamingChat() {
       // Create new abort controller
       abortControllerRef.current = new AbortController();
 
+      // Define the cancel function that will be returned
+      const cancelFunction = async () => {
+        const iterationId = iterationIdRef.current;
+        console.log("Cancelling iteration:", iterationId);
+
+        if (iterationId) {
+          try {
+            await fetch(
+              `http://localhost:8080/api/sessions/${sessionId}/iterations/${iterationId}/cancel`,
+              {
+                method: "POST",
+                headers: {
+                  "X-User-ID": getUserId(),
+                },
+              }
+            );
+          } catch (error) {
+            console.error("Error cancelling iteration:", error);
+          }
+        }
+
+        cleanup();
+
+        // Mark as complete
+        setResponse((prev) => ({
+          ...prev,
+          isComplete: true,
+        }));
+      };
+
+      // Create the controls object that will be returned
+      const controls: StreamingControls = {
+        cancel: cancelFunction
+      };
+
       // Set timeout for request (30 seconds)
-      const timeoutId = window.setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
         }
       }, 30000);
 
-      // Start fetching
+      // Start fetching in the background
       (async () => {
         try {
           const response = await fetch(
@@ -103,7 +140,7 @@ export function useStreamingChat() {
                 message: { content: message },
               }),
               signal: abortControllerRef.current?.signal,
-            },
+            }
           );
 
           // Clear the timeout
@@ -211,17 +248,17 @@ export function useStreamingChat() {
                       setResponse({
                         fullContent: fullContentRef.current,
                         isComplete: true,
-                        iterationId: data.id,
+                        iterationId: iterationIdRef.current,
                         error: null,
                       });
 
-                      // Clean up and exit
+                      // Clean up
                       cleanup();
                       return;
 
                     case "error":
                       throw new Error(
-                        data.error || "Unknown error from server",
+                        data.error || "Unknown error from server"
                       );
                   }
                 } catch (e) {
@@ -273,39 +310,10 @@ export function useStreamingChat() {
         }
       })();
 
-      // Return controls
-      return {
-        cancel: async () => {
-          const iterationId = iterationIdRef.current;
-          console.log("Cancelling iteration:", iterationId);
-
-          if (iterationId) {
-            try {
-              await fetch(
-                `http://localhost:8080/api/sessions/${sessionId}/iterations/${iterationId}/cancel`,
-                {
-                  method: "POST",
-                  headers: {
-                    "X-User-ID": getUserId(),
-                  },
-                },
-              );
-            } catch (error) {
-              console.error("Error cancelling iteration:", error);
-            }
-          }
-
-          cleanup();
-
-          // Mark as complete
-          setResponse((prev) => ({
-            ...prev,
-            isComplete: true,
-          }));
-        },
-      };
+      // Return controls immediately
+      return controls;
     },
-    [cleanup, getUserId],
+    [cleanup, getUserId]
   );
 
   return { response, startStreaming };
